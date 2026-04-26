@@ -1,6 +1,8 @@
 # AI Harness Experiment
 
-Minimal Python harness that orchestrates the Cursor CLI through four stages:
+Minimal Python harness that orchestrates the Cursor CLI through four stages
+(after **creating a work branch** from `origin/main` for each new task — see
+Requirements):
 
 1. **Planner** — produces a kebab-case task slug and writes `.harness/<slug>.plan.md`.
 2. **Implementer** — edits files per the plan.
@@ -14,6 +16,12 @@ Steps 2+3 loop up to 3 times. If the third review still fails, the final review 
 - `cursor-agent` CLI on `PATH` (authenticated).
 - `gh` CLI on `PATH` (authenticated) for the PR step.
 - Target directory must be a git repo with an `origin` remote.
+- For **new** tasks (not `--continue`), the harness runs `git fetch origin main`
+then `git checkout -b harness/wip-<timestamp> origin/main`, renames the branch
+to `harness/<slug>-<timestamp>` after the planner picks a slug, and does all
+implementation on that branch. The default base ref is `main`; adjust the
+`BASE_BRANCH` constant in `harness.py` if your default branch differs.
+Resuming with `--continue` does not create or switch branches.
 
 ## Install the `harness` wrapper
 

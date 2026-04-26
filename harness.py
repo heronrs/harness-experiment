@@ -2,7 +2,8 @@
 """
 Minimal AI coding harness built on top of the Cursor CLI.
 
-Flow: plan -> (implement -> review) x up to 3 -> commit + draft PR.
+Flow: new branch from origin/main -> plan -> (implement -> review) x up to 3
+-> commit + draft PR on that branch.
 
 Usage:
     python harness.py "add a /health endpoint to the API"
@@ -31,6 +32,8 @@ MAX_REVIEW_ITERATIONS = 3
 AGENT_TIMEOUT_SECONDS = 15 * 60
 HARNESS_DIR = Path(".harness")
 LOGS_DIR = HARNESS_DIR / "logs"
+# Branch cut from this remote tracking ref at the start of each new task.
+BASE_BRANCH = "main"
 
 
 PLANNER_PROMPT = """\
@@ -127,6 +130,8 @@ class HarnessContext:
     plan_path: Path | None = None
     review_path: Path | None = None
     slug: str | None = None
+    # Set when a new task creates `harness/wip-<ts>`; used to rename to `harness/<slug>-<ts>`.
+    branch_ts: str | None = None
 
 
 @dataclass
@@ -411,14 +416,40 @@ def sh(cmd: list[str], *, cwd: Path, check: bool = True, capture: bool = False) 
     )
 
 
+def checkout_feature_branch_from_origin_main(ctx: HarnessContext) -> None:
+    """Create and switch to a new branch from origin/<BASE_BRANCH> (new tasks only)."""
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    ctx.branch_ts = ts
+    wip = f"harness/wip-{ts}"
+    sh(["git", "fetch", "origin", BASE_BRANCH], cwd=ctx.repo)
+    verify = subprocess.run(
+        ["git", "rev-parse", "--verify", f"refs/remotes/origin/{BASE_BRANCH}"],
+        cwd=ctx.repo,
+        capture_output=True,
+        text=True,
+    )
+    if verify.returncode != 0:
+        die(
+            f"ref origin/{BASE_BRANCH} not found after `git fetch origin {BASE_BRANCH}`. "
+            "Ensure remote `origin` exists and the default branch is available as "
+            f"`origin/{BASE_BRANCH}`."
+        )
+    sh(["git", "checkout", "-b", wip, f"origin/{BASE_BRANCH}"], cwd=ctx.repo)
+    log(f"checked out new branch {wip!r} from origin/{BASE_BRANCH}")
+
+
+def rename_feature_branch_to_slug(ctx: HarnessContext) -> None:
+    """Rename harness/wip-<ts> to harness/<slug>-<ts> after the planner picks a slug."""
+    assert ctx.slug and ctx.branch_ts
+    final = f"harness/{ctx.slug}-{ctx.branch_ts}"
+    sh(["git", "branch", "-m", final], cwd=ctx.repo)
+    log(f"renamed branch to {final!r}")
+
+
 def commit_and_open_pr(ctx: HarnessContext) -> None:
     assert ctx.slug and ctx.plan_path and ctx.review_path
     if not shutil.which("gh"):
         die("`gh` CLI not found; cannot open a PR.")
-
-    ts = time.strftime("%Y%m%d-%H%M%S")
-    branch = f"harness/{ctx.slug}-{ts}"
-    sh(["git", "checkout", "-b", branch], cwd=ctx.repo)
 
     status = sh(
         ["git", "status", "--porcelain"], cwd=ctx.repo, capture=True
@@ -514,7 +545,9 @@ def main() -> None:
 
     try:
         if next_stage == "planner":
+            checkout_feature_branch_from_origin_main(ctx)
             run_planner(ctx)
+            rename_feature_branch_to_slug(ctx)
             save_state(ctx, "implementer", 1)
             next_stage = "implementer"
             start_iteration = 1
