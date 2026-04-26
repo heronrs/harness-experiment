@@ -53,6 +53,29 @@ Useful flags:
 - `--model <slug>` — override the default (`claude-4.6-sonnet-medium-thinking`).
 - `--repo <path>` — target a repo other than the current working directory.
 - `--skip-pr` — run the plan/implement/review loop but do not commit or open a PR (handy for smoke tests).
+- `--continue <token>` — resume an interrupted run from its last checkpoint (see below).
+
+## Resuming an interrupted run
+
+Before each stage (planner, every implementer iteration, every reviewer
+iteration, and the commit step) the harness writes a checkpoint to
+`.harness/<slug>.state.json`. If a run exits non-zero — e.g. a `cursor-agent`
+crash, network blip, or `Ctrl-C` — the harness prints a copy-pasteable resume
+command to stderr:
+
+```text
+[harness] Run interrupted. Resume with:
+  harness --continue <token>
+```
+
+The token is a base64url-encoded `{repo, slug}` payload, so you can run
+`harness --continue <token>` from any directory and it will pick up from the
+exact stage and iteration that was about to run (no replanning, no redoing
+already-passed iterations). The saved task and model are reused automatically;
+pass `--model` to override on resume.
+
+State files are removed on terminal outcomes (successful PR, `--skip-pr`
+return, or the loop exhausting `MAX_REVIEW_ITERATIONS`).
 
 ## Artifacts
 
@@ -60,5 +83,6 @@ Everything the harness writes lives under `.harness/` (auto-added to `.gitignore
 
 - `.harness/<slug>.plan.md` — the plan; gets a `## Final review (unresolved)` section appended if the loop exhausts.
 - `.harness/<slug>.review.md` — latest reviewer output, overwritten each iteration.
+- `.harness/<slug>.state.json` — checkpoint for `--continue`; deleted on terminal outcomes.
 - `.harness/logs/<slug>-<stage>-<iter>.log` — raw stdout of each `cursor-agent` invocation.
 

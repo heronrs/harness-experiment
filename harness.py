@@ -14,13 +14,15 @@ The target repo is the current working directory.
 from __future__ import annotations
 
 import argparse
+import base64
+import json
 import os
 import re
 import shutil
 import subprocess
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 
@@ -125,6 +127,74 @@ class HarnessContext:
     plan_path: Path | None = None
     review_path: Path | None = None
     slug: str | None = None
+
+
+@dataclass
+class RunState:
+    task: str
+    model: str
+    repo: str        # absolute path as string
+    slug: str
+    next_stage: str  # "implementer" | "reviewer" | "commit"
+    iteration: int   # meaningful for implementer/reviewer stages
+
+
+def _state_file_path(repo: Path, slug: str) -> Path:
+    return repo / HARNESS_DIR / f"{slug}.state.json"
+
+
+def _state_file_exists(ctx: HarnessContext) -> bool:
+    if not ctx.slug:
+        return False
+    return _state_file_path(ctx.repo, ctx.slug).exists()
+
+
+def save_state(ctx: HarnessContext, next_stage: str, iteration: int) -> None:
+    assert ctx.slug
+    state = RunState(
+        task=ctx.task,
+        model=ctx.model,
+        repo=str(ctx.repo),
+        slug=ctx.slug,
+        next_stage=next_stage,
+        iteration=iteration,
+    )
+    path = _state_file_path(ctx.repo, ctx.slug)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(asdict(state), indent=2))
+
+
+def load_state(repo: Path, slug: str) -> RunState:
+    path = _state_file_path(repo, slug)
+    if not path.exists():
+        die(f"no state file found at {path}; cannot resume.")
+    try:
+        data = json.loads(path.read_text())
+        return RunState(**data)
+    except Exception as exc:
+        die(f"state file {path} is malformed: {exc}")
+    raise AssertionError("unreachable")  # satisfy type checker after die()
+
+
+def encode_token(repo: Path, slug: str) -> str:
+    payload = json.dumps({"repo": str(repo), "slug": slug})
+    return base64.urlsafe_b64encode(payload.encode()).decode()
+
+
+def decode_token(token: str) -> tuple[Path, str]:
+    try:
+        data = json.loads(base64.urlsafe_b64decode(token.encode()).decode())
+        return Path(data["repo"]), data["slug"]
+    except Exception as exc:
+        die(f"invalid --continue token: {exc}")
+    raise AssertionError("unreachable")
+
+
+def cleanup_state(ctx: HarnessContext) -> None:
+    if not ctx.slug:
+        return
+    path = _state_file_path(ctx.repo, ctx.slug)
+    path.unlink(missing_ok=True)
 
 
 def die(msg: str, code: int = 1) -> None:
@@ -383,7 +453,15 @@ def commit_and_open_pr(ctx: HarnessContext) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("task", help="Natural-language description of the task.")
+    parser.add_argument("task", nargs="?", default=None,
+                        help="Natural-language description of the task.")
+    parser.add_argument(
+        "--continue",
+        dest="continue_token",
+        default=None,
+        metavar="TOKEN",
+        help="Resume an interrupted run from a saved checkpoint.",
+    )
     parser.add_argument(
         "--model",
         default=DEFAULT_MODEL,
@@ -401,40 +479,89 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if not args.task and not args.continue_token:
+        die("provide a task description or --continue TOKEN to resume a run.")
+
     repo = Path(args.repo).resolve()
     if not (repo / ".git").exists():
         die(f"{repo} is not a git repository.")
 
-    ctx = HarnessContext(task=args.task, model=args.model, repo=repo)
+    if args.continue_token:
+        repo_path, slug = decode_token(args.continue_token)
+        state = load_state(repo_path, slug)
+        ctx = HarnessContext(
+            task=state.task,
+            model=args.model if args.model != DEFAULT_MODEL else state.model,
+            repo=repo_path,
+            slug=state.slug,
+            plan_path=HARNESS_DIR / f"{slug}.plan.md",
+            review_path=HARNESS_DIR / f"{slug}.review.md",
+        )
+        next_stage = state.next_stage
+        start_iteration = state.iteration
+    else:
+        ctx = HarnessContext(task=args.task, model=args.model, repo=repo)
+        next_stage = "planner"
+        start_iteration = 1
+
     ensure_harness_dir(ctx.repo)
 
     log(f"task: {ctx.task}")
     log(f"repo: {ctx.repo}")
     log(f"model: {ctx.model}")
+    if args.continue_token:
+        log(f"resuming from stage={next_stage} iteration={start_iteration}")
 
-    run_planner(ctx)
+    try:
+        if next_stage == "planner":
+            run_planner(ctx)
+            save_state(ctx, "implementer", 1)
+            next_stage = "implementer"
+            start_iteration = 1
 
-    passed = False
-    for iteration in range(1, MAX_REVIEW_ITERATIONS + 1):
-        log(f"--- iteration {iteration}/{MAX_REVIEW_ITERATIONS} ---")
-        run_implementer(ctx, iteration)
-        if run_reviewer(ctx, iteration):
-            passed = True
-            break
+        passed = next_stage == "commit"
 
-    if not passed:
-        append_final_review_to_plan(ctx)
-        die(
-            f"review did not pass within {MAX_REVIEW_ITERATIONS} iterations. "
-            f"See {ctx.plan_path} for unresolved issues."
-        )
+        if not passed:
+            for iteration in range(start_iteration, MAX_REVIEW_ITERATIONS + 1):
+                log(f"--- iteration {iteration}/{MAX_REVIEW_ITERATIONS} ---")
+                if next_stage == "implementer":
+                    save_state(ctx, "implementer", iteration)
+                    run_implementer(ctx, iteration)
+                    save_state(ctx, "reviewer", iteration)
+                    next_stage = "reviewer"
 
-    if args.skip_pr:
-        log("--skip-pr set; stopping before commit/PR.")
-        return
+                passed = run_reviewer(ctx, iteration)
+                if passed:
+                    save_state(ctx, "commit", iteration)
+                    break
+                next_stage = "implementer"
 
-    commit_and_open_pr(ctx)
-    log("done.")
+        if not passed:
+            cleanup_state(ctx)
+            append_final_review_to_plan(ctx)
+            die(
+                f"review did not pass within {MAX_REVIEW_ITERATIONS} iterations. "
+                f"See {ctx.plan_path} for unresolved issues."
+            )
+
+        if args.skip_pr:
+            log("--skip-pr set; stopping before commit/PR.")
+            cleanup_state(ctx)
+            return
+
+        commit_and_open_pr(ctx)
+        cleanup_state(ctx)
+        log("done.")
+
+    except SystemExit as exc:
+        if exc.code != 0 and ctx.slug and _state_file_exists(ctx):
+            token = encode_token(ctx.repo, ctx.slug)
+            print(
+                f"\n[harness] Run interrupted. Resume with:\n"
+                f"  harness --continue {token}",
+                file=sys.stderr,
+            )
+        raise
 
 
 if __name__ == "__main__":
