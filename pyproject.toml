@@ -1,0 +1,28 @@
+[project]
+name = "harness"
+version = "0.2.0"
+description = "Minimal AI coding harness built on top of the Cursor CLI."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "typer>=0.15,<0.16",
+    "rich>=13,<14",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<9",
+]
+
+[project.scripts]
+harness = "harness.cli:app"
+
+[build-system]
+requires = ["hatchling>=1.24,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/harness"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

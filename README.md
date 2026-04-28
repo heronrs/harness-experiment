@@ -11,57 +11,82 @@ Requirements):
 
 Steps 2+3 loop up to 3 times. If the third review still fails, the final review is appended under a `## Final review (unresolved)` section at the bottom of the plan file and the run aborts without committing.
 
+## Architecture
+
+The package follows a layered architecture under `src/harness/` (CLI →
+orchestrator → services → infrastructure → domain). See
+`[docs/architecture.md](docs/architecture.md)` for the full contract,
+module index, and conventions. Agents working in this repo should also
+read `[AGENTS.md](AGENTS.md)`.
+
 ## Requirements
 
+- Python 3.10+.
 - `cursor-agent` CLI on `PATH` (authenticated).
 - `gh` CLI on `PATH` (authenticated) for the PR step.
 - Target directory must be a git repo with an `origin` remote.
-- For **new** tasks (not `--continue`), the harness runs `git fetch origin main`
+- For **new** tasks (not `harness continue`), the harness runs `git fetch origin main`
 then `git checkout -b harness/wip-<timestamp> origin/main`, renames the branch
 to `harness/<slug>-<timestamp>` after the planner picks a slug, and does all
 implementation on that branch. The default base ref is `main`; adjust the
-`BASE_BRANCH` constant in `harness.py` if your default branch differs.
-Resuming with `--continue` does not create or switch branches.
+`BASE_BRANCH` constant in `src/harness/config.py` if your default branch differs.
+Resuming with `harness continue` does not create or switch branches.
 
-## Install the `harness` wrapper
+## Install
 
-A thin bash wrapper lives at `bin/harness`. It forwards to `harness.py` while
-keeping your shell's current directory, so the target repo is whatever folder
-you invoke it from.
-
-Put it on `PATH` one of two ways:
+Editable install (recommended — exposes a `harness` console script):
 
 ```bash
-# Option A: symlink into an existing PATH dir
-ln -s ~/github/hotelgine/harness-experiment/bin/harness ~/.local/bin/harness
-
-# Option B: add the bin dir to PATH in ~/.zshrc (or equivalent)
-echo 'export PATH="$HOME/github/hotelgine/harness-experiment/bin:$PATH"' >> ~/.zshrc
+pip install -e ".[dev]"
 ```
 
-Override the Python interpreter with `HARNESS_PYTHON=/path/to/python` if
-`python3` isn't what you want.
+Or use the bundled `bin/harness` wrapper without installing:
+
+```bash
+ln -s "$(pwd)/bin/harness" ~/.local/bin/harness
+# or
+echo 'export PATH="'"$(pwd)"'/bin:$PATH"' >> ~/.zshrc
+```
+
+The wrapper sets `PYTHONPATH` to the `src/` layout and invokes
+`python3 -m harness`. Override the interpreter with
+`HARNESS_PYTHON=/path/to/python` if needed.
 
 ## Usage
 
 From the root of the target repo:
 
 ```bash
-harness "add a /health endpoint that returns 200 OK"
+harness run "add a /health endpoint that returns 200 OK"
 ```
 
-Or invoke the script directly:
+Backwards-compatible shortcut still works via the wrapper:
 
 ```bash
-python /path/to/harness.py "add a /health endpoint that returns 200 OK"
+harness "add a /health endpoint that returns 200 OK"   # same as `harness run "..."`
 ```
 
-Useful flags:
+You can also invoke the module directly:
 
-- `--model <slug>` — override the default (`claude-4.6-sonnet-medium-thinking`).
-- `--repo <path>` — target a repo other than the current working directory.
-- `--skip-pr` — run the plan/implement/review loop but do not commit or open a PR (handy for smoke tests).
-- `--continue <token>` — resume an interrupted run from its last checkpoint (see below).
+```bash
+python -m harness run "add a /health endpoint that returns 200 OK"
+```
+
+### Subcommands and flags
+
+`harness run <task>`
+
+- `--model, -m <slug>` — override the default (`claude-4.6-sonnet-medium-thinking`).
+- `--repo, -r <path>` — target a repo other than the current working directory.
+- `--skip-pr` — run the plan/implement/review loop but do not commit or open a PR
+(handy for smoke tests).
+
+`harness continue <token>`
+
+- `--model, -m <slug>` — override the model saved in the checkpoint.
+- `--skip-pr` — same as above.
+
+`harness --help` and `harness run --help` print full Typer-generated help.
 
 ## Resuming an interrupted run
 
@@ -73,11 +98,11 @@ command to stderr:
 
 ```text
 [harness] Run interrupted. Resume with:
-  harness --continue <token>
+  harness continue <token>
 ```
 
 The token is a base64url-encoded `{repo, slug}` payload, so you can run
-`harness --continue <token>` from any directory and it will pick up from the
+`harness continue <token>` from any directory and it will pick up from the
 exact stage and iteration that was about to run (no replanning, no redoing
 already-passed iterations). The saved task and model are reused automatically;
 pass `--model` to override on resume.
@@ -91,6 +116,12 @@ Everything the harness writes lives under `.harness/` (auto-added to `.gitignore
 
 - `.harness/<slug>.plan.md` — the plan; gets a `## Final review (unresolved)` section appended if the loop exhausts.
 - `.harness/<slug>.review.md` — latest reviewer output, overwritten each iteration.
-- `.harness/<slug>.state.json` — checkpoint for `--continue`; deleted on terminal outcomes.
+- `.harness/<slug>.state.json` — checkpoint for `harness continue`; deleted on terminal outcomes.
 - `.harness/logs/<slug>-<stage>-<iter>.log` — raw stdout of each `cursor-agent` invocation.
+
+## Tests
+
+```bash
+pytest
+```
 

@@ -1,19 +1,13 @@
-"""Unit tests for the checkpoint/resume state system in harness.py."""
+"""Unit tests for the checkpoint/resume state system."""
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
 
-# Allow importing harness from the project root
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from harness import (
-    HarnessContext,
-    RunState,
-    cleanup_state,
+from harness.domain.models import HarnessContext
+from harness.infrastructure.state_store import (
     decode_token,
     encode_token,
     load_state,

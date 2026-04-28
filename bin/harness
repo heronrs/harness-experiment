@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Thin wrapper around harness.py so it can be invoked as `harness "task"` from
-# any directory. The target repo is the directory from which this wrapper is
-# called (harness.py defaults --repo to $PWD).
+# Thin wrapper around the harness CLI so it can be invoked as `harness ...`
+# from any directory without installing the package globally. The target
+# repo is the directory from which this wrapper is called (the `run`
+# subcommand defaults --repo to $PWD).
 
 set -euo pipefail
 
@@ -12,13 +13,13 @@ while [[ -L "$SOURCE" ]]; do
   [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
 done
 SCRIPT_DIR="$(cd -- "$(dirname -- "$SOURCE")" && pwd)"
-HARNESS_PY="$(cd -- "$SCRIPT_DIR/.." && pwd)/harness.py"
-
-if [[ ! -f "$HARNESS_PY" ]]; then
-  echo "harness: cannot find harness.py at $HARNESS_PY" >&2
-  exit 1
-fi
+PROJECT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 PYTHON_BIN="${HARNESS_PYTHON:-python3}"
 
-exec "$PYTHON_BIN" "$HARNESS_PY" "$@"
+# Make sure `import harness` resolves to the src/ layout without requiring
+# `pip install -e .`. Once installed via pip the script entry point is used
+# directly and this wrapper is unnecessary.
+export PYTHONPATH="${PROJECT_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
+
+exec "$PYTHON_BIN" -m harness "$@"
