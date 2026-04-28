@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from harness.infrastructure.agent_stream import parse_event_line, render_event
+from harness.infrastructure.agent_stream import (
+    classify_delta,
+    delta_stream_prefix,
+    delta_stream_suffix,
+    parse_event_line,
+    render_event,
+)
 
 
 def test_parse_event_line_valid() -> None:
@@ -138,7 +144,9 @@ def test_render_unknown_event_type_returns_marker() -> None:
     assert "[unknown:future_event_type_we_dont_know]" in out
 
 
-def test_render_thinking_event() -> None:
+def test_render_thinking_non_delta_event() -> None:
+    # Non-delta thinking events (no timestamp_ms) still render as a
+    # standalone line via render_event.
     event = {
         "type": "thinking",
         "message": {"content": [{"type": "text", "text": "let me consider..."}]},
@@ -147,6 +155,55 @@ def test_render_thinking_event() -> None:
     assert out is not None
     assert "[thinking]" in out
     assert "let me consider" in out
+
+
+def test_render_thinking_delta_suppressed_in_render_event() -> None:
+    # Delta thinking events are coalesced by the streaming caller via
+    # classify_delta, so render_event must not emit them as their own
+    # lines (otherwise each token becomes a separate `[thinking] ...` line).
+    event = {
+        "type": "thinking",
+        "subtype": "delta",
+        "text": "Let",
+        "timestamp_ms": 1,
+    }
+    assert render_event(event) is None
+
+
+def test_classify_delta_assistant() -> None:
+    event = {
+        "type": "assistant",
+        "timestamp_ms": 1,
+        "message": {"content": [{"type": "text", "text": "hi"}]},
+    }
+    assert classify_delta(event) == ("assistant", "hi")
+
+
+def test_classify_delta_thinking_text_field() -> None:
+    # cursor-agent emits thinking deltas with a top-level ``text`` field.
+    event = {
+        "type": "thinking",
+        "subtype": "delta",
+        "text": " me read",
+        "timestamp_ms": 2,
+    }
+    assert classify_delta(event) == ("thinking", " me read")
+
+
+def test_classify_delta_non_delta_returns_none() -> None:
+    assert classify_delta({"type": "system"}) is None
+    non_delta_assistant = {
+        "type": "assistant",
+        "message": {"content": [{"type": "text", "text": "x"}]},
+    }
+    assert classify_delta(non_delta_assistant) is None
+
+
+def test_delta_stream_prefix_and_suffix() -> None:
+    assert "[thinking]" in delta_stream_prefix("thinking")
+    assert delta_stream_prefix("assistant") == ""
+    assert delta_stream_suffix("thinking") != ""
+    assert delta_stream_suffix("assistant") == ""
 
 
 def test_render_assistant_with_no_text_returns_none() -> None:
