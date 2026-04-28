@@ -27,6 +27,7 @@ from harness.infrastructure.state_store import (
     state_file_exists,
 )
 from harness.logging import die, log
+from harness.services.ask import run_ask as _run_ask
 from harness.services.code_qa_phase import CODE_QA_STAGES, run_code_qa_phase
 from harness.services.planner import run_planner
 from harness.services.pr import commit_and_open_pr
@@ -121,3 +122,13 @@ def resume_from_token(*, token: str, model_override: str | None, skip_pr: bool) 
         start_iteration=state.iteration,
         skip_pr=skip_pr,
     )
+
+
+def ask(*, prompt: str, model: str, repo: Path) -> int:
+    """One-shot ad-hoc query. Bypasses the pipeline entirely.
+
+    Re-exposed here (rather than imported directly from services in the
+    CLI) so that the layer contract — cli depends only on orchestrator —
+    is preserved.
+    """
+    return _run_ask(prompt=prompt, model=model, cwd=repo)

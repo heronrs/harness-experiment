@@ -78,9 +78,14 @@ Dataclasses only. `HarnessContext` carries per-run state in memory;
 
 - `**shell.py**` — single `sh()` wrapper around `subprocess.run` with
 consistent logging. All shell-out paths should funnel through here.
-- `**cursor_agent.py**` — `ensure_cursor_agent()` and `run_agent()`. The
-only place that spawns `cursor-agent`. Streams output to the terminal
-AND tees to `.harness/logs/<slug>-<stage>-<iter>.log`.
+- `**cursor_agent.py**` — `ensure_cursor_agent()`, `run_agent()` (for
+pipeline stages, tees the JSONL stream to
+`.harness/logs/<slug>-<stage>-<iter>.jsonl`), and `run_agent_ephemeral()`
+(for one-shot ad-hoc queries, no log file). Both share a private
+`_stream_agent()` helper that owns the subprocess + event-rendering
+loop. The only place that spawns `cursor-agent`.
+- `**agent_stream.py**` — pure functions that parse and render a single
+`stream-json` event for the terminal. No I/O, no subprocess.
 - `**git.py**` — branch creation, rename, dirty-tree check, commit+push.
 - `**github.py**` — `gh` CLI wrappers (currently just `open_draft_pr`).
 - `**state_store.py**` — JSON-on-disk checkpoints + base64url resume tokens.
@@ -126,6 +131,10 @@ at `MAX_REVIEW_ITERATIONS`. On success, leaves checkpoint at
 exhaustion, appends the final qa report and `die()`s.
 - `**pr.py**` — composes commit message + PR body and delegates to
 `infrastructure.git` and `infrastructure.github`.
+- `**ask.py**` — one-shot ad-hoc query that bypasses the pipeline.
+Forwards a prompt to ``cursor-agent`` via the ephemeral runner (no
+log file, no checkpoint context) and returns the exit code. Used by
+the ``harness ask`` subcommand.
 
 ### `orchestrator.py`
 
@@ -136,8 +145,16 @@ where each phase internally loops:
 - review-phase: `(implementer → reviewer) × MAX_REVIEW_ITERATIONS`
 - code-qa-phase: `(code_qa → implementer_code_qa_fix) × MAX_CODE_QA_ITERATIONS`
 
-Two entry points: `run_new_task()` for fresh runs, `resume_from_token()`
-for `harness continue`. The `_run_loop()` helper is shared between them
+Three entry points:
+
+- `run_new_task()` for fresh runs of the pipeline.
+- `resume_from_token()` for `harness continue` (resumes from
+ a checkpoint).
+- `ask()` for one-shot pass-throughs that don't touch the pipeline at
+ all. Re-exposes `services.ask.run_ask()` so the CLI's "talks only to
+ orchestrator" layer rule still holds.
+
+The `_run_loop()` helper is shared between the two pipeline entry points
 and handles `SystemExit` to print the resume hint on failure. It
 dispatches to a phase module by checking which phase's `*_STAGES` set
 contains the current `next_stage` value, so resume-mid-phase works
@@ -145,9 +162,9 @@ without per-stage branching here.
 
 ### `cli.py`
 
-Typer app exposing two subcommands: `run` and `continue`. The CLI never
-contains business logic — it parses arguments, validates the repo path,
-and delegates to the orchestrator.
+Typer app exposing three subcommands: `run`, `continue`, and `ask`. The
+CLI never contains business logic — it parses arguments, validates the
+repo path, and delegates to the orchestrator.
 
 ## Conventions
 

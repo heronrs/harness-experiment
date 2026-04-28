@@ -1,10 +1,12 @@
 """Typer-based command-line entry point.
 
-Two subcommands:
+Subcommands:
 
 - ``harness run "<task>"`` — start a new task on a fresh feature branch.
 - ``harness continue <token>`` — resume an interrupted run from a saved
   checkpoint.
+- ``harness ask "<text>"`` — one-shot pass-through to ``cursor-agent``,
+  no pipeline, no log files.
 
 Backwards-compatible shortcut: ``harness "<task>"`` is treated as
 ``harness run "<task>"``.
@@ -69,6 +71,33 @@ def continue_run(
     ),
 ) -> None:
     orchestrator.resume_from_token(token=token, model_override=model, skip_pr=skip_pr)
+
+
+@app.command(
+    help=(
+        "One-shot pass-through to cursor-agent: streams the response and "
+        "exits. No plan, no review, no log files."
+    )
+)
+def ask(
+    text: str = typer.Argument(..., help="Prompt text to send to cursor-agent."),
+    model: str = typer.Option(
+        DEFAULT_MODEL, "--model", "-m", help="cursor-agent model slug."
+    ),
+    repo: Path = typer.Option(
+        Path.cwd(),
+        "--repo",
+        "-r",
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        resolve_path=True,
+        help="Working directory for the agent (default: cwd).",
+    ),
+) -> None:
+    code = orchestrator.ask(prompt=text, model=model, repo=repo)
+    if code != 0:
+        raise typer.Exit(code=code)
 
 
 if __name__ == "__main__":

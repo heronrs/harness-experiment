@@ -14,8 +14,9 @@ before making any structural change.
 - The package lives under `src/harness/`. There is no top-level
 `harness.py` anymore.
 - The CLI is built with [Typer](https://typer.tiangolo.com/) and
-exposes two subcommands: `harness run "<task>"` and
-`harness continue <token>`.
+exposes three subcommands: `harness run "<task>"` (full pipeline),
+`harness continue <token>` (resume), and `harness ask "<text>"`
+(one-shot pass-through to cursor-agent, no pipeline / no log files).
 - Logging goes through `harness.logging` (Rich-backed). Don't `print()`
 from library code.
 - Tests live under `tests/` and are run with `pytest`.
