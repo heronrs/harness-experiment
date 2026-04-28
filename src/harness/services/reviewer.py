@@ -7,6 +7,7 @@ from harness.domain.models import HarnessContext
 from harness.infrastructure.cursor_agent import run_agent
 from harness.logging import die, log
 from harness.prompts import REVIEWER_PROMPT
+from harness.services.status_trailer import reconcile_with_exit_code
 
 
 def run_reviewer(ctx: HarnessContext, iteration: int) -> bool:
@@ -21,7 +22,15 @@ def run_reviewer(ctx: HarnessContext, iteration: int) -> bool:
     code, _ = run_agent(prompt, ctx=ctx, stage="reviewer", iteration=iteration)
     if not abs_review.exists():
         die(f"reviewer did not create {ctx.review_path}")
-    if code == 0:
+    # The trailer is authoritative; exit code is unreliable because the
+    # agent does not always honor the "exit 1 on FAIL" instruction.
+    passed = reconcile_with_exit_code(
+        report_path=abs_review,
+        exit_code=code,
+        stage="reviewer",
+        iteration=iteration,
+    )
+    if passed:
         log(f"reviewer iteration {iteration}: PASS")
         return True
     log(f"reviewer iteration {iteration}: FAIL (exit {code})")

@@ -116,13 +116,20 @@ promotes the temp plan file to its final path, and populates
 - `**implementer.py**` — runs the implementer agent for one iteration.
 Stage-agnostic: callers pass a `guidance` string so the implementer
 never branches on whether it's recovering from a review or qa failure.
-- `**reviewer.py**` — runs the reviewer agent and parses pass/fail;
-exposes `append_final_review_to_plan()` for the review phase to call
-on exhaustion.
+- `**reviewer.py**` — runs the reviewer agent and parses pass/fail
+via the report's `STATUS:` trailer (see `status_trailer.py`); exposes
+`append_final_review_to_plan()` for the review phase to call on
+exhaustion.
 - `**code_qa.py**` — runs the code-qa agent against the target repo's
 existing lint/typecheck/format suite (tests are out of scope).
 Mirrors `reviewer.py`'s shape, including
 `append_final_code_qa_to_plan()`.
+- `**status_trailer.py**` — parses the `STATUS: PASS` / `STATUS: FAIL`
+trailer the reviewer and code-qa agents are required to write as the
+last line of their report. The trailer is authoritative; the agent's
+process exit code is unreliable (the LLM does not always honor the
+"exit 1 on FAIL" instruction) and is only used to surface diagnostic
+warnings on disagreement.
 - `**review_phase.py**` — owns the implementer↔reviewer loop, capped
 at `MAX_REVIEW_ITERATIONS`. On success, leaves checkpoint at
 `code_qa`. On exhaustion, appends the final review and `die()`s.
