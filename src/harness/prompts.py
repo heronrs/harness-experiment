@@ -104,6 +104,21 @@ Rules:
 """
 
 
+JIRA_FETCH_PROMPT = """\
+Use the Atlassian MCP tool to fetch the Jira issue at this URL: {url}
+
+Output ONLY the following block and nothing else:
+<TASK_DESCRIPTION>
+<one-line summary of the issue>
+
+<full description of the issue>
+</TASK_DESCRIPTION>
+
+If the Atlassian MCP requires authentication, output exactly this line and nothing else:
+AUTH_REQUIRED
+"""
+
+
 CODE_QA_PROMPT = """\
 You are the CODE-QA stage of an automated coding harness.
 
