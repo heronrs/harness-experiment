@@ -1,8 +1,10 @@
-"""High-level use case: run the full plan/implement/review/PR pipeline.
+"""High-level use case: run the full plan/implement/review/qa/PR pipeline.
 
-The orchestrator is the only place that knows about the full state
-machine. Lower layers each handle a single concern; this module wires
-them together and owns the resume/checkpoint flow.
+The orchestrator is intentionally a flat sequence of phases. Each phase
+encapsulates its own iteration loop and checkpoint handling in
+``services/<phase>.py``; this module just dispatches to them in order.
+Adding a new phase = new module + one ``if`` block here. No existing
+phase needs to change.
 """
 
 from __future__ import annotations
@@ -10,7 +12,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from harness.config import HARNESS_DIR, MAX_REVIEW_ITERATIONS
+from harness.config import HARNESS_DIR
 from harness.domain.models import HarnessContext
 from harness.infrastructure.git import (
     checkout_feature_branch_from_origin_main,
@@ -25,10 +27,10 @@ from harness.infrastructure.state_store import (
     state_file_exists,
 )
 from harness.logging import die, log
-from harness.services.implementer import run_implementer
 from harness.services.planner import run_planner
 from harness.services.pr import commit_and_open_pr
-from harness.services.reviewer import append_final_review_to_plan, run_reviewer
+from harness.services.code_qa_phase import CODE_QA_STAGES, run_code_qa_phase
+from harness.services.review_phase import REVIEW_STAGES, run_review_phase
 from harness.services.workspace import ensure_harness_dir
 
 
@@ -55,33 +57,22 @@ def _run_loop(
             run_planner(ctx)
             rename_feature_branch_to_slug(ctx)
             save_state(ctx, "implementer", 1)
-            next_stage = "implementer"
-            start_iteration = 1
+            next_stage, start_iteration = "implementer", 1
 
-        passed = next_stage == "commit"
-
-        if not passed:
-            for iteration in range(start_iteration, MAX_REVIEW_ITERATIONS + 1):
-                log(f"--- iteration {iteration}/{MAX_REVIEW_ITERATIONS} ---")
-                if next_stage == "implementer":
-                    save_state(ctx, "implementer", iteration)
-                    run_implementer(ctx, iteration)
-                    save_state(ctx, "reviewer", iteration)
-                    next_stage = "reviewer"
-
-                passed = run_reviewer(ctx, iteration)
-                if passed:
-                    save_state(ctx, "commit", iteration)
-                    break
-                next_stage = "implementer"
-
-        if not passed:
-            cleanup_state(ctx)
-            append_final_review_to_plan(ctx)
-            die(
-                f"review did not pass within {MAX_REVIEW_ITERATIONS} iterations. "
-                f"See {ctx.plan_path} for unresolved issues."
+        if next_stage in REVIEW_STAGES:
+            run_review_phase(
+                ctx, start_iteration=start_iteration, start_stage=next_stage
             )
+            next_stage, start_iteration = "code_qa", 1
+
+        if next_stage in CODE_QA_STAGES:
+            run_code_qa_phase(
+                ctx, start_iteration=start_iteration, start_stage=next_stage
+            )
+            next_stage = "commit"
+
+        if next_stage != "commit":
+            die(f"orchestrator reached unknown stage: {next_stage!r}")
 
         if skip_pr:
             log("--skip-pr set; stopping before commit/PR.")
@@ -119,6 +110,7 @@ def resume_from_token(
         slug=state.slug,
         plan_path=HARNESS_DIR / f"{slug}.plan.md",
         review_path=HARNESS_DIR / f"{slug}.review.md",
+        code_qa_path=HARNESS_DIR / f"{slug}.code_qa.md",
     )
     ensure_harness_dir(ctx.repo)
     log(f"task: {ctx.task}")

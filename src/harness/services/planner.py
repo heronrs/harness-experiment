@@ -45,6 +45,7 @@ def run_planner(ctx: HarnessContext) -> None:
     ctx.slug = slug
     ctx.plan_path = HARNESS_DIR / f"{slug}.plan.md"
     ctx.review_path = HARNESS_DIR / f"{slug}.review.md"
+    ctx.code_qa_path = HARNESS_DIR / f"{slug}.code_qa.md"
 
     abs_plan = ctx.repo / ctx.plan_path
     if abs_tmp_plan.exists():

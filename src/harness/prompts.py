@@ -45,21 +45,29 @@ Read `{plan_path}` in full and implement the task it describes.
 Rules:
 - Make all code changes required by the plan.
 - Run any quick local checks you have available (formatters, linters, type
-  checkers, unit tests) and fix issues they surface.
+  checkers) and fix issues they surface. A dedicated code-qa stage will
+  run the project's lint/typecheck/format suite afterwards.
 - DO NOT commit, push, or create branches. Leave changes in the working tree.
 - DO NOT modify files under `.harness/` — they are harness bookkeeping.
 """
 
 
 IMPLEMENTER_FIRST_ITERATION_GUIDANCE = (
-    "This is the first implementation attempt, so there is no prior review yet."
+    "This is the first implementation attempt, so there is no prior feedback yet."
 )
 
 
-IMPLEMENTER_FOLLOWUP_GUIDANCE = """\
+IMPLEMENTER_REVIEW_FOLLOWUP_GUIDANCE = """\
 A previous review found issues. Read `{review_path}` in full and address
 EVERY problem it raises before finishing. If the review asks you to change
 behavior, change behavior; if it asks for tests, add tests.
+"""
+
+
+IMPLEMENTER_CODE_QA_FOLLOWUP_GUIDANCE = """\
+A previous code-qa run found lint/typecheck/format failures. Read
+`{code_qa_path}` in full and fix EVERY failure it lists. Do not change
+behavior beyond what's needed to make those checks pass.
 """
 
 
@@ -89,4 +97,61 @@ Your job:
 Rules:
 - Do NOT edit any source files. The only file you may write is `{review_path}`.
 - Be strict but fair. A tiny nit is not a FAIL; a real bug or missing test is.
+"""
+
+
+CODE_QA_PROMPT = """\
+You are the CODE-QA stage of an automated coding harness.
+
+Your job is to run the target repository's existing static-analysis suite
+against the current working tree and report whether it passes.
+
+Do the following, in this exact order:
+
+1. Discover what QA tooling this repository actually has by inspecting
+   (in priority order, only the ones that exist):
+     - `package.json` -> `scripts` (look for `lint`, `typecheck`, `type-check`,
+       `tsc`, `format:check`, `prettier:check`, `check`, `ci`)
+     - `pyproject.toml` / `setup.cfg` / `tox.ini` (ruff, flake8, black, mypy,
+       pyright)
+     - `Makefile` (targets like `lint`, `typecheck`, `format-check`)
+     - `.pre-commit-config.yaml`
+     - `Gemfile` / `Rakefile` (rubocop, standardrb, sorbet)
+     - `go.mod` (`go vet`, `staticcheck`, `golangci-lint`)
+     - `Cargo.toml` (`cargo clippy`, `cargo fmt --check`)
+
+2. Run ONLY the lint, typecheck, and format-check commands you discovered.
+   EXPLICITLY SKIP:
+     - unit tests
+     - integration tests
+     - end-to-end tests
+     - anything that hits the network or requires running services
+   If the discovered command bundles tests with lint (e.g. `npm run ci`),
+   prefer the narrower individual scripts.
+
+3. Overwrite `{code_qa_path}` with a markdown report containing:
+     - a "## Tooling discovered" section listing every relevant config
+       file you found and which commands you selected from each
+     - a "## Commands run" section with, for each command: the exact
+       command, its exit code, and a concise summary of any failures
+       (file:line + the rule/error message). Truncate long output.
+     - a "## Skipped" section briefly noting test suites you skipped.
+
+4. The VERY LAST line of `{code_qa_path}` MUST be exactly one of:
+     STATUS: PASS
+     STATUS: FAIL
+
+5. After writing the file, exit the agent with:
+     - exit code 0 if every command you ran exited 0 (STATUS: PASS)
+     - exit code 1 if any command failed (STATUS: FAIL)
+   You can do this by running `exit 0` or `exit 1` in a shell tool call
+   as your final action.
+
+Rules:
+- Do NOT edit any source files. The only file you may write is `{code_qa_path}`.
+- If the repository has NO discoverable lint/typecheck/format tooling at
+  all, write that finding to `{code_qa_path}` and exit 0 (STATUS: PASS) — there
+  is nothing to enforce.
+- Do NOT install new tools or add new config. Use only what's already
+  declared in the repo.
 """

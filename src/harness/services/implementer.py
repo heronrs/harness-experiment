@@ -1,4 +1,10 @@
-"""Implementer stage: edits the working tree per the plan."""
+"""Implementer stage: edits the working tree per the plan.
+
+The implementer is intentionally agnostic about *why* it's being invoked.
+Callers (review phase, qa phase) supply a ``guidance`` string that is
+embedded into the prompt; the implementer itself never branches on
+stage-specific concerns.
+"""
 
 from __future__ import annotations
 
@@ -6,21 +12,16 @@ from harness.config import MAX_REVIEW_ITERATIONS
 from harness.domain.models import HarnessContext
 from harness.infrastructure.cursor_agent import run_agent
 from harness.logging import die
-from harness.prompts import (
-    IMPLEMENTER_FIRST_ITERATION_GUIDANCE,
-    IMPLEMENTER_FOLLOWUP_GUIDANCE,
-    IMPLEMENTER_PROMPT,
-)
+from harness.prompts import IMPLEMENTER_PROMPT
 
 
-def run_implementer(ctx: HarnessContext, iteration: int) -> None:
-    assert ctx.plan_path and ctx.review_path
-    if iteration == 1:
-        guidance = IMPLEMENTER_FIRST_ITERATION_GUIDANCE
-    else:
-        guidance = IMPLEMENTER_FOLLOWUP_GUIDANCE.format(
-            review_path=str(ctx.review_path)
-        )
+def run_implementer(
+    ctx: HarnessContext,
+    iteration: int,
+    *,
+    guidance: str,
+) -> None:
+    assert ctx.plan_path
     prompt = IMPLEMENTER_PROMPT.format(
         plan_path=str(ctx.plan_path),
         iteration=iteration,

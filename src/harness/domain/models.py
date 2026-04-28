@@ -13,6 +13,7 @@ class HarnessContext:
     repo: Path
     plan_path: Path | None = None
     review_path: Path | None = None
+    code_qa_path: Path | None = None
     slug: str | None = None
     branch_ts: str | None = None
 
