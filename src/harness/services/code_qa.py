@@ -13,6 +13,7 @@ from harness.domain.models import HarnessContext
 from harness.infrastructure.cursor_agent import run_agent
 from harness.logging import die, log
 from harness.prompts import CODE_QA_PROMPT
+from harness.services.status_trailer import reconcile_with_exit_code
 
 
 def run_code_qa(ctx: HarnessContext, iteration: int) -> bool:
@@ -24,7 +25,15 @@ def run_code_qa(ctx: HarnessContext, iteration: int) -> bool:
     code, _ = run_agent(prompt, ctx=ctx, stage="code-qa", iteration=iteration)
     if not abs_code_qa.exists():
         die(f"code-qa did not create {ctx.code_qa_path}")
-    if code == 0:
+    # The trailer is authoritative; exit code is unreliable because the
+    # agent does not always honor the "exit 1 on FAIL" instruction.
+    passed = reconcile_with_exit_code(
+        report_path=abs_code_qa,
+        exit_code=code,
+        stage="code-qa",
+        iteration=iteration,
+    )
+    if passed:
         log(f"code-qa iteration {iteration}: PASS")
         return True
     log(f"code-qa iteration {iteration}: FAIL (exit {code})")
