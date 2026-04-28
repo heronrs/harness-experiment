@@ -24,16 +24,13 @@ def run_planner(ctx: HarnessContext) -> None:
         plan_path=str(tmp_plan_path),
         slug_path=str(slug_path),
     )
-    code, _ = run_agent(
-        prompt, ctx=ctx, stage="planner", iteration=0, plan_mode=True
-    )
+    code, _ = run_agent(prompt, ctx=ctx, stage="planner", iteration=0, plan_mode=True)
     if code != 0:
         die(f"planner exited with code {code}")
 
     if not abs_slug.exists():
         die(
-            f"planner did not create {slug_path}. "
-            "Check the planner log for details."
+            f"planner did not create {slug_path}. " "Check the planner log for details."
         )
     slug = sanitize_slug(abs_slug.read_text())
     if not slug:

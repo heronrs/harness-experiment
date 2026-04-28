@@ -27,9 +27,9 @@ from harness.infrastructure.state_store import (
     state_file_exists,
 )
 from harness.logging import die, log
+from harness.services.code_qa_phase import CODE_QA_STAGES, run_code_qa_phase
 from harness.services.planner import run_planner
 from harness.services.pr import commit_and_open_pr
-from harness.services.code_qa_phase import CODE_QA_STAGES, run_code_qa_phase
 from harness.services.review_phase import REVIEW_STAGES, run_review_phase
 from harness.services.workspace import ensure_harness_dir
 
@@ -98,9 +98,7 @@ def run_new_task(*, task: str, model: str, repo: Path, skip_pr: bool) -> None:
     _run_loop(ctx, next_stage="planner", start_iteration=1, skip_pr=skip_pr)
 
 
-def resume_from_token(
-    *, token: str, model_override: str | None, skip_pr: bool
-) -> None:
+def resume_from_token(*, token: str, model_override: str | None, skip_pr: bool) -> None:
     repo_path, slug = decode_token(token)
     state = load_state(repo_path, slug)
     ctx = HarnessContext(

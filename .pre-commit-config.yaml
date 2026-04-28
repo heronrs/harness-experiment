@@ -1,0 +1,10 @@
+# Pre-commit hooks for the harness repo.
+# Install once with: pre-commit install
+# Run manually on the whole repo with: pre-commit run --all-files
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format

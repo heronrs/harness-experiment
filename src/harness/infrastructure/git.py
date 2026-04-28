@@ -30,7 +30,8 @@ def checkout_feature_branch_from_origin_main(ctx: HarnessContext) -> None:
     )
     if verify.returncode != 0:
         die(
-            f"ref origin/{BASE_BRANCH} not found after `git fetch origin {BASE_BRANCH}`. "
+            f"ref origin/{BASE_BRANCH} not found after "
+            f"`git fetch origin {BASE_BRANCH}`. "
             "Ensure remote `origin` exists and the default branch is available as "
             f"`origin/{BASE_BRANCH}`."
         )

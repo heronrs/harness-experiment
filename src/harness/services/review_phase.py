@@ -26,9 +26,7 @@ def _implementer_guidance(ctx: HarnessContext, iteration: int) -> str:
     if iteration == 1:
         return IMPLEMENTER_FIRST_ITERATION_GUIDANCE
     assert ctx.review_path
-    return IMPLEMENTER_REVIEW_FOLLOWUP_GUIDANCE.format(
-        review_path=str(ctx.review_path)
-    )
+    return IMPLEMENTER_REVIEW_FOLLOWUP_GUIDANCE.format(review_path=str(ctx.review_path))
 
 
 def run_review_phase(

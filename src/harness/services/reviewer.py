@@ -37,7 +37,8 @@ def append_final_review_to_plan(ctx: HarnessContext) -> None:
         f.write("\n\n## Final review (unresolved)\n\n")
         f.write(
             f"The harness exhausted its {MAX_REVIEW_ITERATIONS} review iterations "
-            "without a passing review. The final reviewer output is preserved below.\n\n"
+            "without a passing review. The final reviewer output is "
+            "preserved below.\n\n"
         )
         f.write(review_body.rstrip() + "\n")
     log(f"appended final review to {ctx.plan_path}")

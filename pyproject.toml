@@ -12,6 +12,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8,<9",
+    "ruff>=0.6,<0.7",
+    "pre-commit>=3.7,<4",
 ]
 
 [project.scripts]
@@ -26,3 +28,25 @@ packages = ["src/harness"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B", "SIM"]
+# Typer uses function calls (typer.Option, typer.Argument) as parameter
+# defaults by design; B008 doesn't apply.
+"src/harness/cli.py" = ["B008"]
+

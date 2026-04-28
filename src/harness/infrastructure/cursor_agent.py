@@ -82,7 +82,10 @@ def run_agent(
                 sys.stdout.flush()
                 if time.time() - start > AGENT_TIMEOUT_SECONDS:
                     proc.kill()
-                    die(f"agent stage '{stage}' timed out after {AGENT_TIMEOUT_SECONDS}s")
+                    die(
+                        f"agent stage '{stage}' timed out after "
+                        f"{AGENT_TIMEOUT_SECONDS}s"
+                    )
         finally:
             proc.wait()
 

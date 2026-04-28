@@ -3,9 +3,11 @@
 Two subcommands:
 
 - ``harness run "<task>"`` — start a new task on a fresh feature branch.
-- ``harness continue <token>`` — resume an interrupted run from a saved checkpoint.
+- ``harness continue <token>`` — resume an interrupted run from a saved
+  checkpoint.
 
-Backwards-compatible shortcut: ``harness "<task>"`` is treated as ``harness run "<task>"``.
+Backwards-compatible shortcut: ``harness "<task>"`` is treated as
+``harness run "<task>"``.
 """
 
 from __future__ import annotations
@@ -14,8 +16,8 @@ from pathlib import Path
 
 import typer
 
-from harness.config import DEFAULT_MODEL
 from harness import orchestrator
+from harness.config import DEFAULT_MODEL
 
 app = typer.Typer(
     help="Minimal AI coding harness built on top of the Cursor CLI.",
@@ -24,7 +26,9 @@ app = typer.Typer(
 )
 
 
-@app.command(help="Run a new task: branch -> plan -> implement/review loop -> draft PR.")
+@app.command(
+    help="Run a new task: branch -> plan -> implement/review loop -> draft PR."
+)
 def run(
     task: str = typer.Argument(..., help="Natural-language description of the task."),
     model: str = typer.Option(
@@ -45,7 +49,11 @@ def run(
     ),
 ) -> None:
     if not (repo / ".git").exists():
-        typer.secho(f"[harness] ERROR: {repo} is not a git repository.", fg="red", err=True)
+        typer.secho(
+            f"[harness] ERROR: {repo} is not a git repository.",
+            fg="red",
+            err=True,
+        )
         raise typer.Exit(code=1)
     orchestrator.run_new_task(task=task, model=model, repo=repo, skip_pr=skip_pr)
 
@@ -60,9 +68,7 @@ def continue_run(
         False, "--skip-pr", help="Skip commit/push/PR after a passing review."
     ),
 ) -> None:
-    orchestrator.resume_from_token(
-        token=token, model_override=model, skip_pr=skip_pr
-    )
+    orchestrator.resume_from_token(token=token, model_override=model, skip_pr=skip_pr)
 
 
 if __name__ == "__main__":
