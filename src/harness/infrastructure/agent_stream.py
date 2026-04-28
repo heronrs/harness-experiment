@@ -103,6 +103,43 @@ def _summarize_tool_result(tool_call: dict[str, Any]) -> str | None:
     return None
 
 
+def classify_delta(event: dict[str, Any]) -> tuple[str, str] | None:
+    """If ``event`` is a streaming token-delta, return ``(kind, text)``.
+
+    ``kind`` is ``"assistant"`` or ``"thinking"``. Returns ``None`` for
+    any non-delta event (the caller should fall back to ``render_event``).
+
+    Splitting deltas out from full-event rendering lets the streaming
+    layer coalesce consecutive same-kind deltas onto one line — the
+    per-event prefix (e.g. ``[thinking]``) is added only at stream-start
+    by the caller.
+    """
+    etype = event.get("type")
+    if etype == "assistant":
+        if not _is_text_delta(event):
+            return None
+        text = _extract_text(event)
+        return ("assistant", text) if text else None
+    if etype == "thinking" and _is_text_delta(event):
+        text = _extract_text(event) or event.get("text") or ""
+        return ("thinking", text) if text else None
+    return None
+
+
+def delta_stream_prefix(kind: str) -> str:
+    """ANSI-colored prefix to emit when a new delta stream of ``kind`` starts."""
+    if kind == "thinking":
+        return f"{_DIM}[thinking] "
+    return ""
+
+
+def delta_stream_suffix(kind: str) -> str:
+    """ANSI reset to emit when a delta stream of ``kind`` ends."""
+    if kind == "thinking":
+        return _RESET
+    return ""
+
+
 def render_event(event: dict[str, Any]) -> str | None:
     """Render a single stream-json event for human consumption.
 
@@ -124,6 +161,11 @@ def render_event(event: dict[str, Any]) -> str | None:
         return text or None
 
     if etype == "thinking":
+        # Streaming deltas are coalesced by the caller via ``classify_delta``
+        # so we don't return them here. A non-delta thinking event (no
+        # ``timestamp_ms``) is rare but still rendered as a standalone line.
+        if _is_text_delta(event):
+            return None
         text = _extract_text(event) or event.get("text") or ""
         if not text:
             return None

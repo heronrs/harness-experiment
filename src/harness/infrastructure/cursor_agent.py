@@ -26,7 +26,13 @@ from typing import IO
 
 from harness.config import AGENT_TIMEOUT_SECONDS, LOGS_DIR
 from harness.domain.models import HarnessContext
-from harness.infrastructure.agent_stream import parse_event_line, render_event
+from harness.infrastructure.agent_stream import (
+    classify_delta,
+    delta_stream_prefix,
+    delta_stream_suffix,
+    parse_event_line,
+    render_event,
+)
 from harness.logging import die, log
 
 
@@ -69,13 +75,17 @@ def _stream_agent(
     user can tell which invocation hung.
     """
     assistant_text: list[str] = []
-    in_delta_stream = False
+    # Track which kind of token-delta stream is currently being printed
+    # ("assistant" or "thinking"). Consecutive deltas of the same kind
+    # stay on one line; switching kinds (or any non-delta event) flushes
+    # a newline first so the next chunk starts cleanly.
+    active_delta_kind: str | None = None
 
     def _flush_delta_newline() -> None:
-        nonlocal in_delta_stream
-        if in_delta_stream:
-            sys.stdout.write("\n")
-            in_delta_stream = False
+        nonlocal active_delta_kind
+        if active_delta_kind is not None:
+            sys.stdout.write(delta_stream_suffix(active_delta_kind) + "\n")
+            active_delta_kind = None
 
     proc = subprocess.Popen(
         cmd,
@@ -101,19 +111,23 @@ def _stream_agent(
                 sys.stdout.write(raw_line)
                 sys.stdout.flush()
             else:
-                rendered = render_event(event)
-                if rendered is not None:
-                    is_delta = (
-                        event.get("type") == "assistant" and "timestamp_ms" in event
-                    )
-                    if is_delta:
-                        assistant_text.append(rendered)
-                        sys.stdout.write(rendered)
-                        in_delta_stream = True
-                    else:
+                delta = classify_delta(event)
+                if delta is not None:
+                    kind, text = delta
+                    if active_delta_kind != kind:
+                        _flush_delta_newline()
+                        sys.stdout.write(delta_stream_prefix(kind))
+                        active_delta_kind = kind
+                    if kind == "assistant":
+                        assistant_text.append(text)
+                    sys.stdout.write(text)
+                    sys.stdout.flush()
+                else:
+                    rendered = render_event(event)
+                    if rendered is not None:
                         _flush_delta_newline()
                         sys.stdout.write(rendered + "\n")
-                    sys.stdout.flush()
+                        sys.stdout.flush()
 
             if time.time() - start > AGENT_TIMEOUT_SECONDS:
                 proc.kill()

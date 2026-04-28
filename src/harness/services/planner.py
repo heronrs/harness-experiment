@@ -12,7 +12,7 @@ from harness.services.slug import sanitize_slug
 
 def run_planner(ctx: HarnessContext) -> None:
     tmp_plan_path = HARNESS_DIR / "_pending.plan.md"
-    slug_path = HARNESS_DIR / "_pending.slug"
+    slug_path = HARNESS_DIR / "_pending.slug.md"
     abs_slug = ctx.repo / slug_path
     abs_tmp_plan = ctx.repo / tmp_plan_path
     for p in (abs_slug, abs_tmp_plan):

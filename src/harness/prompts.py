@@ -17,11 +17,15 @@ Task from the user:
 Do the following, in this exact order:
 
 1. Come up with a short kebab-case slug that describes the task
-   (lowercase, hyphen-separated, at most 6 words, ASCII only, no file extension,
+   (lowercase, hyphen-separated, at most 6 words, ASCII only,
    e.g. `add-health-endpoint`).
 2. Write that slug and NOTHING ELSE (no quotes, no surrounding whitespace,
-   no trailing newline beyond one) to the file `{slug_path}`.
-   This file MUST exist when you finish, or the harness will abort.
+   no markdown formatting, no trailing newline beyond one) as the entire
+   contents of the file `{slug_path}`. The `.md` extension is only there
+   because plan mode is restricted to markdown files; the file's contents
+   must still be just the bare slug, e.g. a one-line file containing
+   `add-health-endpoint`. This file MUST exist when you finish, or the
+   harness will abort.
 3. Then read the repository structure as needed and write a concrete,
    step-by-step implementation plan to `{plan_path}`. The plan should
    cover: files to touch, new functions/classes, data flow,
