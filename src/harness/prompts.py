@@ -82,13 +82,10 @@ Your job:
 1. Inspect the current working tree changes (use `git status` and
    `git diff` — compare against `origin/main` if it exists, otherwise
    against `HEAD`).
-2. Evaluate the diff against `{plan_path}` for:
-   - correctness and obvious bugs
-   - missing test coverage for new behavior
-   - security concerns
-   - adherence to the plan
-3. Overwrite `{review_path}` with your findings in markdown. Be specific:
-   cite file paths and line numbers. If there are no issues, say so briefly.
+2. Review the code against the plan in `{plan_path}`:
+   use the pull-request-review skill.
+3. Overwrite `{review_path}` with your findings in markdown. 
+   Be specific: if there are no issues, say so briefly.
 4. The VERY LAST line of `{review_path}` MUST be exactly one of:
      STATUS: PASS
      STATUS: FAIL
