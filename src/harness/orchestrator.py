@@ -99,6 +99,22 @@ def run_new_task(*, task: str, model: str, repo: Path, skip_pr: bool) -> None:
     _run_loop(ctx, next_stage="planner", start_iteration=1, skip_pr=skip_pr)
 
 
+def run_from_ticket(*, ticket_url: str, model: str, repo: Path, skip_pr: bool) -> None:
+    """Fetch a Jira ticket via Atlassian MCP then run the full pipeline."""
+    from harness.infrastructure.atlassian import (
+        fetch_jira_task,  # local import to keep top-level imports lean
+    )
+
+    ensure_harness_dir(repo)
+    log(f"ticket: {ticket_url}")
+    task = fetch_jira_task(ticket_url, model=model, repo=repo)
+    log(f"task (from ticket): {task[:120]}")
+    ctx = HarnessContext(task=task, model=model, repo=repo)
+    log(f"repo: {ctx.repo}")
+    log(f"model: {ctx.model}")
+    _run_loop(ctx, next_stage="planner", start_iteration=1, skip_pr=skip_pr)
+
+
 def resume_from_token(*, token: str, model_override: str | None, skip_pr: bool) -> None:
     repo_path, slug = decode_token(token)
     state = load_state(repo_path, slug)

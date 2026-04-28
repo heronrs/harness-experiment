@@ -8,8 +8,8 @@ Subcommands:
 - ``harness ask "<text>"`` — one-shot pass-through to ``cursor-agent``,
   no pipeline, no log files.
 
-Backwards-compatible shortcut: ``harness "<task>"`` is treated as
-``harness run "<task>"``.
+Backwards-compatible shortcut: ``harness -t <url>`` is treated as
+``harness run -t <url>``.
 """
 
 from __future__ import annotations
@@ -23,16 +23,63 @@ from harness.config import DEFAULT_MODEL
 
 app = typer.Typer(
     help="Minimal AI coding harness built on top of the Cursor CLI.",
-    no_args_is_help=True,
     add_completion=False,
 )
+
+
+@app.callback(invoke_without_command=True)
+def _root(
+    ctx: typer.Context,
+    ticket: str | None = typer.Option(
+        None,
+        "--ticket",
+        "-t",
+        help="Jira task URL (shortcut for 'harness run -t <url>').",
+    ),
+    model: str = typer.Option(DEFAULT_MODEL, "--model", "-m"),
+    repo: Path = typer.Option(
+        Path.cwd(),
+        "--repo",
+        "-r",
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        resolve_path=True,
+    ),
+    skip_pr: bool = typer.Option(False, "--skip-pr"),
+) -> None:
+    if ctx.invoked_subcommand is not None:
+        return
+    if ticket is None:
+        typer.echo(ctx.get_help())
+        raise typer.Exit()
+    if not (repo / ".git").exists():
+        typer.secho(
+            f"[harness] ERROR: {repo} is not a git repository.",
+            fg="red",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    orchestrator.run_from_ticket(
+        ticket_url=ticket, model=model, repo=repo, skip_pr=skip_pr
+    )
 
 
 @app.command(
     help="Run a new task: branch -> plan -> implement/review loop -> draft PR."
 )
 def run(
-    task: str = typer.Argument(..., help="Natural-language description of the task."),
+    task: str | None = typer.Argument(
+        None, help="Natural-language description of the task."
+    ),
+    ticket: str | None = typer.Option(
+        None,
+        "--ticket",
+        "-t",
+        help=(
+            "Jira task URL. Fetches task via Atlassian MCP instead of a text argument."
+        ),
+    ),
     model: str = typer.Option(
         DEFAULT_MODEL, "--model", "-m", help="cursor-agent model slug."
     ),
@@ -57,7 +104,20 @@ def run(
             err=True,
         )
         raise typer.Exit(code=1)
-    orchestrator.run_new_task(task=task, model=model, repo=repo, skip_pr=skip_pr)
+
+    if ticket:
+        orchestrator.run_from_ticket(
+            ticket_url=ticket, model=model, repo=repo, skip_pr=skip_pr
+        )
+    elif task:
+        orchestrator.run_new_task(task=task, model=model, repo=repo, skip_pr=skip_pr)
+    else:
+        typer.secho(
+            "[harness] ERROR: Provide either a TASK argument or --ticket/-t.",
+            fg="red",
+            err=True,
+        )
+        raise typer.Exit(code=1)
 
 
 @app.command(name="continue", help="Resume an interrupted run from a checkpoint token.")
